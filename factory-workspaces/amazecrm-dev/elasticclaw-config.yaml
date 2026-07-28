@@ -1,0 +1,20 @@
+schema_version: v1
+name: amazecrm-dev
+
+provider: daytona
+
+repositories:
+  - repo: amazecrm/amazecrm
+    permissions: write
+
+env: {}
+
+# Optional runtime overrides:
+# instance_type: r1.large
+# ttl: 48h
+# default_model: anthropic/claude-sonnet-4-6
+# llm_key: anthropic-prod
+# nix: false
+# docker: false
+# tags: ["crm", "frontend"]
+# color: teal
