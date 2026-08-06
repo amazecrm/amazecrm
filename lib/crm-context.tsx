@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
 import { Contact, Deal, Activity } from './crm-types'
 import { demoContacts, demoDeals, demoActivities, generateId } from './crm-store'
+import { calculateCRMStats, type CRMStats } from './crm-stats'
 
 interface CRMContextType {
   // Contacts
@@ -27,14 +28,7 @@ interface CRMContextType {
   toggleActivityComplete: (id: string) => void
   
   // Stats
-  stats: {
-    totalContacts: number
-    totalDeals: number
-    totalPipeline: number
-    totalWon: number
-    conversionRate: number
-    pendingActivities: number
-  }
+  stats: CRMStats
 }
 
 const CRMContext = createContext<CRMContextType | undefined>(undefined)
@@ -116,21 +110,7 @@ export function CRMProvider({ children }: { children: ReactNode }) {
     ))
   }, [])
   
-  // Calculate stats
-  const wonDeals = deals.filter(d => d.stage === 'closed-won')
-  const lostDeals = deals.filter(d => d.stage === 'closed-lost')
-  const openDeals = deals.filter(d => !['closed-won', 'closed-lost'].includes(d.stage))
-  
-  const stats = {
-    totalContacts: contacts.length,
-    totalDeals: deals.length,
-    totalPipeline: openDeals.reduce((sum, d) => sum + d.value, 0),
-    totalWon: wonDeals.reduce((sum, d) => sum + d.value, 0),
-    conversionRate: wonDeals.length + lostDeals.length > 0 
-      ? Math.round((wonDeals.length / (wonDeals.length + lostDeals.length)) * 100) 
-      : 0,
-    pendingActivities: activities.filter(a => !a.completed).length,
-  }
+  const stats = calculateCRMStats(contacts, deals, activities)
   
   return (
     <CRMContext.Provider value={{
