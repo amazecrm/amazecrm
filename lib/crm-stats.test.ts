@@ -112,4 +112,74 @@ describe('calculateCRMStats', () => {
 
     expect(calculateCRMStats([], deals, []).conversionRate).toBe(100)
   })
+
+  it.each<DealStage>(['discovery', 'proposal', 'negotiation'])(
+    'includes a %s deal in pipeline value but not won value',
+    stage => {
+      const stats = calculateCRMStats(
+        [],
+        [createDeal(stage, stage, 250)],
+        [],
+      )
+
+      expect(stats).toMatchObject({
+        totalDeals: 1,
+        totalPipeline: 250,
+        totalWon: 0,
+        conversionRate: 0,
+      })
+    },
+  )
+
+  it.each([
+    ['closed-won', 250, 100],
+    ['closed-lost', 0, 0],
+  ] as const)(
+    'excludes a %s deal from pipeline value',
+    (stage, totalWon, conversionRate) => {
+      const stats = calculateCRMStats(
+        [],
+        [createDeal(stage, stage, 250)],
+        [],
+      )
+
+      expect(stats).toMatchObject({
+        totalPipeline: 0,
+        totalWon,
+        conversionRate,
+      })
+    },
+  )
+
+  it.each([
+    ['one win and one loss', ['closed-won', 'closed-lost'], 50],
+    [
+      'one win and two losses',
+      ['closed-won', 'closed-lost', 'closed-lost'],
+      33,
+    ],
+    [
+      'two wins and one loss',
+      ['closed-won', 'closed-won', 'closed-lost'],
+      67,
+    ],
+  ] as const)('calculates conversion for %s', (_, stages, expected) => {
+    const deals = stages.map((stage, index) =>
+      createDeal(`closed-${index}`, stage, 100),
+    )
+
+    expect(calculateCRMStats([], deals, []).conversionRate).toBe(expected)
+  })
+
+  it('counts only incomplete activities as pending', () => {
+    const activities = [
+      createActivity('complete-1', true),
+      createActivity('pending-1', false),
+      createActivity('complete-2', true),
+      createActivity('pending-2', false),
+      createActivity('pending-3', false),
+    ]
+
+    expect(calculateCRMStats([], [], activities).pendingActivities).toBe(3)
+  })
 })
