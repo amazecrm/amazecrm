@@ -23,9 +23,7 @@ secret_refs:
 
 enable_manual_trigger: true
 
-# Plan approval: plan_gate: true on plan_validate opts out of freeform hub
-# keyword plan checks. Plan acceptance is schema-only (plan.json fields) via a
-# deterministic gate. Requires ElasticClaw hub with plan_gate support.
+# Plan approval via plan_gate (schema check on .elasticclaw/plan.json).
 # Docs: https://elasticclaw.ai/docs/workflows#plan-approval
 stages:
   - id: plan
@@ -37,16 +35,25 @@ stages:
         New task: **{{.Issue.Identifier}}** — {{.Issue.Title}}
         {{.Issue.URL}}
 
-        Before implementing, write `.elasticclaw/plan.json` with:
-          understanding  (string) — what the issue requires
-          area           (string) — repos/packages/files likely involved
-          steps          (array of strings) — rough implementation plan
-          verification   (string) — how you will verify (tests, typecheck, manual)
+        ## What humans watching this chat need
+        Tool activity alone is NOT enough. Write plain assistant messages they can read.
 
-        Then say exactly: [PLAN_READY]
-        Do not edit product code until the next stage injects proceed.
+        ## Plan stage (do this first)
+        1. Read the Linear issue if you need more detail.
+        2. Write `.elasticclaw/plan.json` with:
+             understanding  (string)
+             area           (string) — repos/packages/files
+             steps          (array of strings)
+             verification   (string)
+        3. Send ONE visible chat message that includes:
+             - Your understanding of the issue (2–4 sentences)
+             - Likely files / areas
+             - Numbered steps
+             - How you will verify
+             - Then on its own line: [PLAN_READY]
+        4. Do NOT implement product code until the Implement stage injects proceed.
+        5. Do NOT only say [PLAN_READY] with no plan text above it.
 
-        Read the full issue details with your Linear tools if needed to fill the plan.
         Follow each touched repo's conventions. Ask questions if anything is unclear.
 
   - id: plan_validate
@@ -56,24 +63,42 @@ stages:
       - message_contains: "[PLAN_READY]"
     on_enter:
       run:
-        # Schema-only check — no NLP. Prints JSON for the gate.
+        # Schema check + echo plan fields so the hub can show them in chat.
         command: |
           python3 - <<'PY'
           import json, pathlib, sys
           path = pathlib.Path(".elasticclaw/plan.json")
-          required = ("understanding", "area", "steps", "verification")
           try:
               data = json.loads(path.read_text())
           except Exception as exc:
               print(json.dumps({"status": "incomplete", "reason": f"unreadable plan.json: {exc}"}))
               sys.exit(0)
-          missing = [k for k in required if not data.get(k)]
-          if missing:
-              print(json.dumps({"status": "incomplete", "reason": f"missing fields: {missing}"}))
-          elif not isinstance(data.get("steps"), list) or not data["steps"]:
-              print(json.dumps({"status": "incomplete", "reason": "steps must be a non-empty list"}))
+          if not isinstance(data, dict):
+              print(json.dumps({"status": "incomplete", "reason": "plan.json must contain a JSON object"}))
+              sys.exit(0)
+          string_fields = ("understanding", "area", "verification")
+          invalid = [
+              k for k in string_fields
+              if not isinstance(data.get(k), str) or not data[k].strip()
+          ]
+          steps = data.get("steps")
+          if invalid:
+              print(json.dumps({"status": "incomplete", "reason": f"invalid {invalid}"}))
+          elif not isinstance(steps, list) or not steps or any(
+              not isinstance(step, str) or not step.strip() for step in steps
+          ):
+              print(json.dumps({
+                  "status": "incomplete",
+                  "reason": "steps must be a non-empty list of strings",
+              }))
           else:
-              print(json.dumps({"status": "ok"}))
+              print(json.dumps({
+                  "status": "ok",
+                  "understanding": data["understanding"].strip(),
+                  "area": data["area"].strip(),
+                  "steps": [s.strip() for s in steps],
+                  "verification": data["verification"].strip(),
+              }))
           PY
         output: plan
         timeout: 2m
@@ -97,10 +122,23 @@ stages:
           verdict: pass
     on_enter:
       inject: |
-        Plan accepted (status {{ .Outputs.plan.status }}).
-        Implement the issue now. Follow each touched repo's conventions.
-        Narrate progress with short updates.
-        When the PR is ready, say [DONE] with the PR URL(s).
+        Plan accepted (status {{ .Outputs.plan.status }}). Start implementing NOW.
+
+        Do not wait for another proceed message. Do not emit [PLAN_READY] again.
+
+        ## Visible progress (required)
+        Humans cannot follow tool rows alone. Post short plain-chat updates:
+
+        1. First message (before edits): what you're starting with.
+        2. After setup (deps/branch): what you did + next step.
+        3. After substantive code changes: files touched + why.
+        4. After checks (lint/typecheck/tests): pass/fail + fix plan if failed.
+        5. When opening the PR: summary + [DONE] with the PR URL(s).
+
+        Format tip: 1–3 sentences per update, not essays. Prefer frequent short posts.
+
+        Follow amazecrm/amazecrm conventions. When the PR is ready:
+        [DONE] https://github.com/amazecrm/amazecrm/pull/N
 
   - id: fix_plan
     label: Fix plan
@@ -111,7 +149,9 @@ stages:
     on_enter:
       inject: |
         Plan incomplete: {{ .Outputs.plan.reason }}
-        Update `.elasticclaw/plan.json`, then say [PLAN_READY] again.
+
+        Update `.elasticclaw/plan.json`, then send a visible revised plan summary
+        and end with [PLAN_READY] on its own line.
         Do not implement product code until the plan gate passes.
 
   - id: pr_opened
@@ -122,6 +162,7 @@ stages:
       move_issue: Agent Needs Review
       inject: |
         PR created. Watch for CI results and review comments.
+        Post short visible updates when CI fails or reviews request changes.
 
   - id: merged
     label: Merged
