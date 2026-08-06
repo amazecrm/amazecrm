@@ -122,8 +122,9 @@ stages:
           verdict: pass
     on_enter:
       inject: |
-        Plan accepted (status {{ .Outputs.plan.status }}). Start implementing NOW.
+        ## Starting implementation for {{.Issue.Identifier}}
 
+        Plan approved (status {{ .Outputs.plan.status }}) — coding begins now.
         Do not wait for another proceed message. Do not emit [PLAN_READY] again.
 
         ## Visible progress (required)
