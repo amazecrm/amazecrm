@@ -23,9 +23,13 @@ secret_refs:
 
 enable_manual_trigger: true
 
+# Plan approval: plan_gate: true on plan_validate opts out of freeform hub
+# keyword plan checks. Plan acceptance is schema-only (plan.json fields) via a
+# deterministic gate. Requires ElasticClaw hub with plan_gate support.
+# Docs: https://elasticclaw.ai/docs/workflows#plan-approval
 stages:
-  - id: working
-    label: Working
+  - id: plan
+    label: Plan
     entry: true
     on_enter:
       move_issue: In Progress
@@ -33,12 +37,82 @@ stages:
         New task: **{{.Issue.Identifier}}** — {{.Issue.Title}}
         {{.Issue.URL}}
 
-        Read the full issue details with your Linear tools, understand the requirements, then implement and open PR(s). Follow each touched repo's conventions.
-        Ask questions if anything is unclear.
+        Before implementing, write `.elasticclaw/plan.json` with:
+          understanding  (string) — what the issue requires
+          area           (string) — repos/packages/files likely involved
+          steps          (array of strings) — rough implementation plan
+          verification   (string) — how you will verify (tests, typecheck, manual)
 
-        IMPORTANT:
-          Before starting work, describe your understanding of the task (including which repo(s) you will change) but do not wait for a response.
-          While working, keep the user updated on your progress with short updates.
+        Then say exactly: [PLAN_READY]
+        Do not edit product code until the next stage injects proceed.
+
+        Read the full issue details with your Linear tools if needed to fill the plan.
+        Follow each touched repo's conventions. Ask questions if anything is unclear.
+
+  - id: plan_validate
+    label: Validate plan
+    plan_gate: true
+    triggers:
+      - message_contains: "[PLAN_READY]"
+    on_enter:
+      run:
+        # Schema-only check — no NLP. Prints JSON for the gate.
+        command: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+          path = pathlib.Path(".elasticclaw/plan.json")
+          required = ("understanding", "area", "steps", "verification")
+          try:
+              data = json.loads(path.read_text())
+          except Exception as exc:
+              print(json.dumps({"status": "incomplete", "reason": f"unreadable plan.json: {exc}"}))
+              sys.exit(0)
+          missing = [k for k in required if not data.get(k)]
+          if missing:
+              print(json.dumps({"status": "incomplete", "reason": f"missing fields: {missing}"}))
+          elif not isinstance(data.get("steps"), list) or not data["steps"]:
+              print(json.dumps({"status": "incomplete", "reason": "steps must be a non-empty list"}))
+          else:
+              print(json.dumps({"status": "ok"}))
+          PY
+        output: plan
+        timeout: 2m
+    gate:
+      output: plan
+      pass:
+        path: status
+        values:
+          - ok
+      fail:
+        path: status
+        values:
+          - incomplete
+      required: true
+
+  - id: implement
+    label: Implement
+    triggers:
+      - gate_result:
+          stage: plan_validate
+          verdict: pass
+    on_enter:
+      inject: |
+        Plan accepted (status {{ .Outputs.plan.status }}).
+        Implement the issue now. Follow each touched repo's conventions.
+        Narrate progress with short updates.
+        When the PR is ready, say [DONE] with the PR URL(s).
+
+  - id: fix_plan
+    label: Fix plan
+    triggers:
+      - gate_result:
+          stage: plan_validate
+          verdict: fail
+    on_enter:
+      inject: |
+        Plan incomplete: {{ .Outputs.plan.reason }}
+        Update `.elasticclaw/plan.json`, then say [PLAN_READY] again.
+        Do not implement product code until the plan gate passes.
 
   - id: pr_opened
     label: PR Opened
