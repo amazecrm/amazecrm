@@ -1,11 +1,15 @@
 import { expect, test } from "@playwright/test"
 
-test("email login opens the dashboard", async ({ page }) => {
+test("demo access opens the dashboard without credentials", async ({ page }) => {
   await page.goto("/login")
 
-  const signInButton = page.getByRole("button", { name: "Sign in", exact: true })
-  await expect(signInButton).toBeVisible()
-  await signInButton.click()
+  await expect(page.getByRole("heading", { name: "Explore the demo" })).toBeVisible()
+  await expect(page.getByText("No account or password required.")).toBeVisible()
+  await expect(page.getByLabel("Password")).toHaveCount(0)
+
+  const demoButton = page.getByRole("button", { name: "Open demo workspace" })
+  await expect(demoButton).toBeVisible()
+  await demoButton.click()
 
   await expect(page).toHaveURL(/\/dashboard$/)
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible()
