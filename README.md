@@ -15,7 +15,8 @@ pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000), select **Get Started**, and
-sign in with the prefilled credentials. Authentication is simulated.
+then select **Open demo workspace**. No account or password is required; the
+entry page makes clear that this is a demo rather than a production sign-in.
 
 ## Persona: Ryland Grace
 
@@ -27,7 +28,7 @@ opportunity, and leave every deal with a clear next action.
 
 1. **Start at the landing page.** Introduce AmazeCRM as one place to connect
    customer relationships, opportunities, and follow-up work. Select **Get
-   Started**, then **Sign in**.
+   Started**, then **Open demo workspace**.
 2. **Review the Dashboard.** Show total contacts, pipeline value, won revenue,
    conversion rate, deal distribution, and recent activity. Ryland can see
    where to focus without assembling a report.
@@ -47,9 +48,9 @@ next demo to restore the original seed data.
 ## Demo limitations
 
 This is a frontend-only demo. CRM records live in React context, refreshes
-restore the seed data, and sign-in does not validate credentials. There is no
-backend API, database, multi-user synchronization, or production authorization
-layer.
+restore the seed data, and demo access does not authenticate a user. There is
+no backend API, database, multi-user synchronization, or production
+authentication or authorization layer.
 
 ## Checks
 
